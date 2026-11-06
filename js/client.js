@@ -48,7 +48,7 @@ function sendData(){
         // Mise à jour de l'affichage dans le HTML
         labelHUM.textContent = humidity + " %";
         labelTEMP.textContent = temperature + " °C";
-        labelwater.textContent = waterLevel;
+        labelwater.textContent = waterLevel + "ml";
         labelSol.textContent = humiditySol + " %";
         labelSolindex.textContent = `Optimal ( ${humiditySol} % )`;
 
