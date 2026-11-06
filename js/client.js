@@ -32,7 +32,7 @@ function playBeep() {
 }
 
 function sendData(){
-    fetch('https://agrisoonbakend.onrender.com/mesure')
+    fetch('https://agrisoonbakend-1.onrender.com/mesure')
     .then(response => {
         if (!response.ok) {
             throw new Error("Erreur réseau lors de la récupération des données");
