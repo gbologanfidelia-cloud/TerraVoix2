@@ -1,0 +1,114 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <DHT.h>
+
+// Identifiants Wi-Fi corrigés (avec les étoiles et sans les tirets)
+const char* ssid = "GUNIK";
+const char* password = "123456789";
+
+// URL de ton backend déployé sur Render
+const char* serverUrl = "https://agrisoonbakend.onrender.com/update";
+
+// Configuration du capteur DHT11
+#define DHTPIN 4
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+// Broches des capteurs et des LEDs
+const int soilMoisturePin = 35;
+const int waterLevelPin = 34;
+const int ledVert = 16;
+const int ledRouge = 17;
+const int ledJaune = 15;
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+
+  pinMode(ledVert, OUTPUT);
+  pinMode(ledRouge, OUTPUT);
+  pinMode(ledJaune, OUTPUT);
+
+  // Connexion Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.print("Connexion au Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWi-Fi connecté avec succès !");
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    // 1. Lecture des capteurs
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    int soilRaw = analogRead(soilMoisturePin);
+    int water = analogRead(waterLevelPin);
+
+    // Vérification si le capteur DHT répond
+    if (isnan(h) || isnan(t)) {
+      Serial.println("Erreur de lecture du capteur DHT !");
+      delay(2000);
+      return;
+    }
+
+    // Conversion de la valeur brute du sol en pourcentage (0% à 100%)
+    int soilPercent = map(soilRaw, 4095, 1200, 0, 100);
+    soilPercent = constrain(soilPercent, 0, 100);
+
+    // 2. Gestion locale des LEDs selon le niveau d'eau
+    if (water > 1500) {
+      digitalWrite(ledRouge, HIGH);
+      digitalWrite(ledJaune, LOW);
+      digitalWrite(ledVert, LOW);
+    } else if (water > 1000) {
+      digitalWrite(ledRouge, LOW);
+      digitalWrite(ledJaune, HIGH);
+      digitalWrite(ledVert, LOW);
+    } else {
+      digitalWrite(ledRouge, LOW);
+      digitalWrite(ledJaune, LOW);
+      digitalWrite(ledVert, HIGH);
+    }
+
+    // 3. Construction de la chaîne JSON
+    String jsonPayload = "{";
+    jsonPayload += "\"temperature\":" + String(t) + ",";
+    jsonPayload += "\"humidity_air\":" + String(h) + ",";
+    jsonPayload += "\"humidity_sol\":" + String(soilPercent) + ",";
+    jsonPayload += "\"niveau_eau\":" + String(water);
+    jsonPayload += "}";
+
+    // 4. Envoi de la requête HTTP POST sécurisée vers Render
+    WiFiClientSecure client;
+    client.setInsecure(); 
+    
+    HTTPClient http;
+    http.setTimeout(15000);
+    http.begin(client, serverUrl);
+    http.addHeader("Content-Type", "application/json");
+
+    int httpResponseCode = http.POST(jsonPayload);
+
+    // 5. Analyse de la réponse du serveur
+    if (httpResponseCode > 0) {
+      String response = http.getString();
+      Serial.println("Données envoyées ! Code HTTP : " + String(httpResponseCode));
+      Serial.println("Réponse du serveur : " + response);
+    } else {
+      Serial.println("Erreur d'envoi vers le serveur : " + String(httpResponseCode));
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi déconnecté ! Tentative de reconnexion...");
+    digitalWrite(ledRouge, HIGH);
+    digitalWrite(ledJaune, HIGH);
+    digitalWrite(ledVert, LOW);
+  }
+
+  delay(5000);
+}
